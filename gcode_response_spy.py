@@ -1,7 +1,10 @@
+#!/usr/bin/env python3
+
 import asyncio
 import websockets
 import json
 import argparse
+from datetime import datetime
 
 async def listen_gcode_responses(host="localhost"):
     uri = f"ws://{host}/websocket"  # Replace <moonraker-ip> with your Moonraker server's IP
@@ -13,8 +16,9 @@ async def listen_gcode_responses(host="localhost"):
             
             # Check if the message contains G-code response
             if data.get("method") == "notify_gcode_response":
+                timestamp = datetime.now().strftime("%H:%M:%S")
                 gcode_response = data.get("params", [])[0]
-                print(f"G-code Response: {gcode_response}")
+                print(f"{timestamp} {gcode_response}", flush=True)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Listen for G-code responses from Moonraker.")
