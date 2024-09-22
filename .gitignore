@@ -1,5 +1,2 @@
-include
-lib
-bin
-pyvenv.cfg
+.venv
 z.gcode
