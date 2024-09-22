@@ -16,7 +16,7 @@ async def listen_gcode_responses(host="localhost"):
             
             # Check if the message contains G-code response
             if data.get("method") == "notify_gcode_response":
-                timestamp = datetime.now().strftime("%H:%M:%S")
+                timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                 gcode_response = data.get("params", [])[0]
                 print(f"{timestamp} {gcode_response}", flush=True)
 

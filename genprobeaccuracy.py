@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+
 import random
 import argparse
 
@@ -7,11 +9,16 @@ def generate_gcode(filename, num_reps=100):
         # Write the header for the G-code file
         f.write('; G-code to test for Z drift\n')
         for i in range(num_reps):
-#            f.write(f'PROBE_ACCURACY SAMPLE_RETRACT_DIST=10 samples=10\n')
-            f.write(f'PROBE samples=5 samples_tolerance=0.005\n')
-            f.write(f'G0 Z10\n')
-            f.write(f'M118 {i}\n')
-               
+            loop = i+1
+            f.write(f'PROBE_ACCURACY SAMPLE_RETRACT_DIST=10 samples=10\n')
+#            f.write(f'PROBE samples=5 samples_tolerance=0.005\n')
+#            f.write(f'G0 Z10\n')
+            f.write(f'M118 Loop count: {loop}\n')
+            if loop == num_reps // 2:
+              f.write('M118 Midpoint reached\n')
+              f.write(f'G0 Z390\n')
+              
+                             
        
 
 # Parameters
