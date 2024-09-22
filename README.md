@@ -12,7 +12,7 @@ terminal 2:
 tail -f ~/tmp/r4.out
 
 #select lines & convert & send to influxdb
-# use a custom writer to avoid buffering
+#use a custom writer to avoid buffering
 
 terminal 3:
 % tail -f  ~/tmp/r4.out|./convert_to_influx.py --measurement probe --result-header "// Result is" --tag "printer=vc4-400" |./influx_write_by_line.py --bucket r3
