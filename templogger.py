@@ -2,67 +2,62 @@
 import asyncio
 import websockets
 import json
+import argparse
 from datetime import datetime
 
-# WebSocket URL for Moonraker on ratos2.local
-MOONRAKER_WS_URL = "ws://ratos2.local:7125/websocket"
+async def listen_temperatures(host="localhost", objects=None):
+    uri = f"ws://{host}/websocket"  # Moonraker WebSocket URL
+    
+    # Build the subscription message with specified objects
+    subscription_params = {obj: ["temperature", "target", "power"] for obj in objects}
+    subscription_message = {
+        "jsonrpc": "2.0",
+        "method": "printer.objects.subscribe",
+        "params": {
+            "objects": subscription_params
+        },
+        "id": 1
+    }
 
-async def subscribe_to_temperatures():
-    async with websockets.connect(MOONRAKER_WS_URL) as websocket:
-        # Subscribe to temperature updates for the bed and extruder
-        subscription_message = {
-            "jsonrpc": "2.0",
-            "method": "printer.objects.subscribe",
-            "params": {
-                "objects": {
-                    "heater_bed": ["temperature", "target"],
-                    "extruder": ["temperature", "target"]
-                }
-            },
-            "id": 1
-        }
+    async with websockets.connect(uri) as websocket:
         await websocket.send(json.dumps(subscription_message))
 
+        # Continuously listen for temperature and PWM updates
         while True:
-            # Receive and handle messages
-            message = await websocket.recv()
-            data = json.loads(message)
+            response = await websocket.recv()
+            data = json.loads(response)
 
-            # Check if the message is a status update notification
-            if data.get("method") == "notify_status_update" and "params" in data:
-                # Extract the status data from params
+            # Process only 'notify_status_update' messages
+            if data.get("method") == "notify_status_update":
                 status_data = data["params"][0] if isinstance(data["params"][0], dict) else {}
-
-                # Extract bed and extruder data if available
-                heater_bed_data = status_data.get("heater_bed", {})
-                extruder_data = status_data.get("extruder", {})
-
-                # Extract temperature data with fallback to None for each
-                bed_temp = heater_bed_data.get("temperature")
-                bed_target = heater_bed_data.get("target", 0.0)
-                extruder_temp = extruder_data.get("temperature")
-                extruder_target = extruder_data.get("target", 0.0)
-
-                # Format available data for InfluxDB line protocol
                 timestamp = int(datetime.now().timestamp() * 1e9)
                 line_parts = ["temperature,device=3d_printer"]
 
-                if bed_temp is not None:
-                    line_parts.append(f"bed_temp={bed_temp},bed_target={bed_target}")
-                if extruder_temp is not None:
-                    line_parts.append(f"extruder_temp={extruder_temp},extruder_target={extruder_target}")
+                # Loop over each object to extract temperature, target, and PWM data
+                for obj in objects:
+                    obj_data = status_data.get(obj, {})
+                    temp = obj_data.get("temperature")
+                    target = obj_data.get("target", 0.0)
+                    pwm = obj_data.get("power", 0.0)
+                    
+                    # Append object data if temperature is available
+                    if temp is not None:
+                        line_parts.append(f"{obj}_temp={temp},{obj}_target={target},{obj}_pwm={pwm}")
 
-                # Join the parts and add timestamp
+                # Join the parts and print if any data is present
                 if len(line_parts) > 1:
                     line = " ".join([",".join(line_parts), str(timestamp)])
-                    print(line)
+                    print(line, flush=True)
                 else:
-                    print("Warning: Temperature data is incomplete.")
-            else:
-                print("Skipping non-status-update message.")
+                    print("Warning: Temperature data is incomplete.", flush=True)
 
-async def main():
-    await subscribe_to_temperatures()
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Listen for temperature and PWM data from Moonraker.")
+    parser.add_argument("--host", required=True, help="Hostname or IP address of the Moonraker server.")
+    parser.add_argument("--obj", required=True, nargs='+', help="Objects to monitor (e.g., heater_bed extruder).")
+    
+    # Parse arguments
+    args = parser.parse_args()
 
-# Run the main function
-asyncio.run(main())
+    # Run the WebSocket listener
+    asyncio.run(listen_temperatures(host=args.host, objects=args.obj))
