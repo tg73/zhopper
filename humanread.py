@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 import sys
 import re
+import argparse
 from datetime import datetime
 
-def parse_line_protocol(line):
+def parse_line_protocol(line, format):
     # Example line format: measurement,tag key1=value1,key2=value2 timestamp
     pattern = r'(?P<measurement>[\w_]+)(?:,(?P<tag>[\w=]+))? (?P<fields>.+) (?P<timestamp>\d+)$'
     match = re.match(pattern, line)
@@ -36,7 +37,9 @@ def parse_line_protocol(line):
             field_data[key] = value
 
     # Convert timestamp to a human-readable format
-    readable_timestamp = datetime.fromtimestamp(int(timestamp) / 1e9).strftime('%Y-%m-%d %H:%M:%S')
+    readable_timestamp = \
+        datetime.fromtimestamp(int(timestamp) / 1e9).strftime('%Y-%m-%d %H:%M:%S') if format == 'line' \
+            else datetime.fromtimestamp(int(timestamp) / 1e9).isoformat()
     
     return {
         'measurement': measurement,
@@ -45,32 +48,48 @@ def parse_line_protocol(line):
         'timestamp': readable_timestamp
     }
 
-def display_header(fields):
-    # Create the header with dynamic field names
-    header = f"{'Timestamp':<20} {'Measurement':<15} {'Tag':<20}"
-    for field in sorted(fields):
-        header += f"{field:<15}"
-    print(header, flush=True)
-    print("=" * len(header), flush=True)
+def display_header(fields, format):
+    if format == "line":
+        # Create the header with dynamic field names
+        header = f"{'Timestamp':<20} {'Measurement':<15} {'Tag':<20}"
+        for field in sorted(fields):
+            header += f"{field:<15}"
+        print(header, flush=True)
+        print("=" * len(header), flush=True)
+    elif format == 'csv':
+        header_parts = ['timestamp', 'measurement']
+        header_parts.extend(map(lambda f: f if not " " in f else '"' + f + '"', sorted(fields)))
+        header = ",".join(header_parts)
+        print(header, flush=True)
 
-def display_entry(entry, fields):
-    # Ensure columns for all known fields, leaving space for missing fields
-    field_values = []
-    for field in sorted(fields):
-        value = entry['fields'].get(field, "")
-        field_values.append(f"{value:<15}")
+def display_entry(entry, fields, format):
+    if format == "line":
+        # Ensure columns for all known fields, leaving space for missing fields
+        field_values = []
+        for field in sorted(fields):
+            value = entry['fields'].get(field, "")
+            field_values.append(f"{value:<15}")
 
-    line = f"{entry['timestamp']:<20} {entry['measurement']:<15} {entry['tag'] or '':<20}" + "".join(field_values)
-    print(line, flush=True)
+        line = f"{entry['timestamp']:<20} {entry['measurement']:<15} {entry['tag'] or '':<20}" + "".join(field_values)
+        print(line, flush=True)
+    elif format == "csv":
+        values = [entry['timestamp'],entry['measurement']]
+        values.extend(map(lambda f: entry['fields'].get(f,""), sorted(fields)))
+        line = ",".join(values)
+        print(line, flush=True)
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Calculate time-weighted averages from InfluxDB line protocol input.")
+    parser.add_argument("--format", choices=["csv", "line"], default="line", help="Output format: 'csv' or 'line' protocol (default: 'line').")
+    args = parser.parse_args()
+    
     parsed_data = []
     all_fields = set()  # Tracks all unique field names seen
     
     # Read input line by line
     for line in sys.stdin:
         line = line.strip()
-        parsed_entry = parse_line_protocol(line)
+        parsed_entry = parse_line_protocol(line, args.format)
         if parsed_entry:
             # Track fields to maintain consistent columns
             current_fields = set(parsed_entry['fields'].keys())
@@ -79,10 +98,10 @@ if __name__ == "__main__":
 
             # Display the header again if new fields are added
             if new_fields:
-                display_header(all_fields)
+                display_header(all_fields, args.format)
 
             # Display each entry, filling in blanks for missing fields
-            display_entry(parsed_entry, all_fields)
+            display_entry(parsed_entry, all_fields, args.format)
 
             # Store the parsed entry for potential further processing
             parsed_data.append(parsed_entry)
